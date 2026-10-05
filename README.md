@@ -21,6 +21,8 @@ Then one deep-dive section per stage:
 8. **Live training:** a real tiny language model (embedding table + output table, 1,037 parameters) trains in the browser. One step is shown in full: the example, the embedding row lookup, the prediction, the loss, the gradient and the update. You can watch the loss fall and the embedding map organize itself.
 9. **Storage:** the real tensor layout of GPT-2's model file (where the embedding table sits), the exact bytes and float32 bits of one token's row, and how the weights get from disk to RAM to the GPU.
 
+10. **Why AI needs GPUs:** the operations per token for real model sizes (GPT-2, Llama 3 8B, GPT-3, Llama 3 405B), broken down by part of the model; a live benchmark of your own device; an animated CPU-vs-GPU race; GPU memory needed (weights plus KV cache, by context length and number of users); and training compute (6 × params × tokens), time, memory and energy.
+
 ## Run locally
 
 ```bash

@@ -35,6 +35,7 @@
         <li><a href="#dataset"><span>7</span>Data</a></li>
         <li><a href="#trainlive"><span>8</span>Train</a></li>
         <li><a href="#storage"><span>9</span>Storage</a></li>
+        <li><a href="#gpu"><span>10</span>GPUs</a></li>
       </ol>
     </div>
   </header>
@@ -396,6 +397,99 @@
       </div>
     </section>
 
+    <!-- 10. GPUs -->
+    <section id="gpu" class="step">
+      <div class="step-head">
+        <span class="step-num">10</span>
+        <div>
+          <h2>Why AI needs so many GPUs</h2>
+          <p>Short answer: for <strong>every single token</strong> the model multiplies by <strong>every one of its billions of weights</strong>, one token at a time, and those weights must sit in very fast memory. Training does the same thing trillions of times. Pick a model and see the real numbers.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="seg model-seg" id="gpuModelSeg" role="radiogroup" aria-label="Model"></div>
+        <div class="stats facts" id="gpuModelFacts"></div>
+      </div>
+
+      <div class="card gap-top">
+        <h3 class="card-title">① It's all multiplication: the work for ONE token</h3>
+        <label class="field">
+          <span>Conversation length so far (context): <b id="ctxVal"></b> tokens</span>
+          <input id="ctx" type="range" min="0" max="17" step="1" value="10">
+        </label>
+        <div class="big-number" id="flopsBig"></div>
+        <div id="flopsBars" class="bars flops-bars"></div>
+        <p class="explain" id="flopsExplain"></p>
+      </div>
+
+      <div class="card gap-top">
+        <h3 class="card-title">② Try it on your own device</h3>
+        <p class="muted small-p">This runs a real 256 × 256 matrix multiplication (33.5 million multiply-adds), the same kind of maths the model does, in your browser and times it.</p>
+        <div class="btn-row"><button id="benchBtn">⏱ Measure my device</button></div>
+        <div id="benchOut"></div>
+      </div>
+
+      <div class="card gap-top">
+        <h3 class="card-title">③ Why GPUs: thousands of small cores working at once</h3>
+        <div class="split">
+          <div>
+            <canvas id="raceCanvas" width="640" height="330" aria-label="CPU versus GPU race"></canvas>
+            <div class="btn-row"><button id="raceBtn">▶ Race: compute 576 output numbers</button></div>
+          </div>
+          <div class="side">
+            <div class="stats">
+              <div><b>8–24</b><span>cores in a typical CPU: each very fast and clever, but few</span></div>
+              <div><b>16,896</b><span>CUDA cores + 528 tensor cores in one NVIDIA H100 GPU</span></div>
+            </div>
+            <p class="note">Each output number of a matrix multiply is independent of the others, so the job splits perfectly across thousands of cores. A GPU core is slower than a CPU core, but there are thousands of them. Tensor cores go further: each multiplies a whole small block of numbers in one go.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card gap-top">
+        <h3 class="card-title">④ Memory: the whole model must fit, and be read for every token</h3>
+        <div class="controls">
+          <label class="field grow">
+            <span>People chatting at the same time: <b id="usersVal"></b></span>
+            <input id="users" type="range" min="0" max="10" step="1" value="0">
+          </label>
+        </div>
+        <div id="memViz"></div>
+        <p class="explain" id="memExplain"></p>
+      </div>
+
+      <div class="card gap-top">
+        <h3 class="card-title">⑤ Training: the same maths, trillions of times, plus learning overhead</h3>
+        <div class="controls">
+          <label class="field grow">
+            <span>Training tokens: <b id="trainTokVal"></b></span>
+            <input id="trainTok" type="range" min="9" max="13.3" step="0.01" value="12">
+          </label>
+          <label class="field grow">
+            <span>Number of H100 GPUs: <b id="gpusVal"></b></span>
+            <input id="gpus" type="range" min="0" max="15" step="1" value="10">
+          </label>
+        </div>
+        <div class="stats facts" id="trainStats"></div>
+        <p class="explain" id="trainExplain"></p>
+      </div>
+
+      <div class="card gap-top">
+        <h3 class="card-title">Everything that makes AI heavy, in one list</h3>
+        <ol class="why-list">
+          <li><b>Billions of weights × every token.</b> About 2 operations per weight per token, so an 8B model does ~16 billion operations for each token it reads or writes.</li>
+          <li><b>One token at a time.</b> Each new token needs the previous one, so a 500-token answer is 500 full passes through the model, one after another.</li>
+          <li><b>Attention grows with the conversation.</b> Every new token looks back at all earlier ones, and their keys and values (the "KV cache") must be kept in memory.</li>
+          <li><b>Memory size.</b> The weights take 2 bytes each, so 8B → 16 GB and 405B → 810 GB, which needs several 80 GB GPUs just to hold it.</li>
+          <li><b>Memory speed.</b> Every weight is read from memory for every token, so memory bandwidth (TB/s), not just compute, often sets the speed.</li>
+          <li><b>Millions of users.</b> Every request repeats all of the above, which is why companies run data centres with tens of thousands of GPUs.</li>
+          <li><b>Training.</b> About 6 × parameters × training tokens operations, plus memory for gradients and optimizer state. This takes thousands of GPUs running for weeks.</li>
+        </ol>
+        <p class="note">Assumptions: H100 SXM = 80 GB memory, 3.35 TB/s bandwidth, ~989 TFLOPS (16-bit, dense), 700 W; training runs at ~40% of peak. Weights stored at 2 bytes. All figures are approximate.</p>
+      </div>
+    </section>
+
     <section class="step recap">
       <h2>The whole loop in one sentence</h2>
       <p class="big">Text → <b>tokens</b> → <b>vectors</b> → mixed by <b>attention</b> → transformed by <b>layers</b> → <b>probabilities</b> → pick a word → repeat.</p>
@@ -409,5 +503,6 @@
 
   <script src="app.js"></script>
   <script src="behind.js"></script>
+  <script src="gpu.js"></script>
 </body>
 </html>

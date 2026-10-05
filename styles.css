@@ -667,3 +667,29 @@ footer { text-align: center; color: var(--muted); font-size: 0.85rem; padding: 3
   .dblock { padding: 10px; }
   .dblock .vgrid.wide-label .vrow { grid-template-columns: 64px repeat(var(--d, 8), minmax(0, 1fr)); }
 }
+
+/* ---------- GPUs ---------- */
+.model-seg { margin-bottom: 16px; }
+.model-seg button { font-size: 0.85rem; }
+.big-number { font-size: 1.15rem; margin: 16px 0 12px; }
+.big-number b { font-size: 2rem; color: var(--accent); letter-spacing: -0.02em; }
+.flops-bars .bar { grid-template-columns: 250px 1fr 70px; }
+.flops-bars .bar .name { font-family: Inter, sans-serif; }
+#raceCanvas { width: 100%; height: auto; display: block; }
+.mem-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 10px; }
+.gpu-card { position: relative; width: 46px; height: 90px; border-radius: 8px; border: 2px solid var(--border); background: var(--bg-2); display: flex; flex-direction: column-reverse; overflow: hidden; }
+.gpu-fill.w { background: var(--accent); }
+.gpu-fill.kv { background: var(--accent-3); }
+.gpu-fill { transition: height 0.4s; }
+.gpu-label { position: absolute; top: 3px; left: 0; right: 0; text-align: center; font-size: 0.62rem; font-weight: 700; color: var(--muted); }
+.gpu-more { font-weight: 700; color: var(--muted); padding: 0 6px 6px; }
+.why-list { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 10px; }
+.why-list li { padding-left: 4px; }
+.why-list li::marker { color: var(--accent); font-weight: 800; }
+
+@media (max-width: 860px) {
+  .flops-bars .bar { grid-template-columns: 1fr 64px; }
+  .flops-bars .bar .name { grid-column: 1 / -1; text-align: left; }
+  .flops-bars .bar .track { grid-column: 1; }
+  .gpu-card { width: 36px; height: 72px; }
+}
