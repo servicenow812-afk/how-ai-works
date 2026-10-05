@@ -23,6 +23,8 @@
       <h1>What happens inside an AI<br>when you type a question?</h1>
       <p class="lede">Large language models like ChatGPT and Claude don't look things up — they predict the next word, one at a time, using billions of learned numbers. Scroll through each step and play with it.</p>
 
+      <a class="cta" href="#walkthrough">▶ Watch one sentence go through the whole AI</a>
+
       <ol class="pipeline" id="pipeline">
         <li><a href="#tokens"><span>1</span>Tokenize</a></li>
         <li><a href="#embeddings"><span>2</span>Embed</a></li>
@@ -35,6 +37,49 @@
   </header>
 
   <main>
+    <!-- 0. Full end-to-end walkthrough -->
+    <section id="walkthrough" class="step">
+      <div class="step-head">
+        <span class="step-num">▶</span>
+        <div>
+          <h2>The whole journey: from your words to the next word</h2>
+          <p>Type a sentence and step through <strong>everything</strong> an LLM does to it — tokens, IDs, vectors, position, attention, layers, scores, probabilities and the final pick. Every number on screen is computed from the step before it, by a miniature model running in your browser.</p>
+        </div>
+      </div>
+      <div class="card">
+        <div class="controls">
+          <label class="field grow">
+            <span>Your prompt</span>
+            <input id="wtInput" type="text" value="the cat sat on the" autocomplete="off">
+          </label>
+          <label class="field wt-temp">
+            <span>Temperature: <b id="wtTempVal">1.0</b></span>
+            <input id="wtTemp" type="range" min="0.1" max="2" step="0.1" value="1">
+          </label>
+        </div>
+
+        <ol class="stepper" id="wtStepper" aria-label="Pipeline stages"></ol>
+
+        <div class="stage" id="wtStage" aria-live="polite">
+          <div class="stage-head">
+            <span class="stage-badge" id="wtBadge">1 / 9</span>
+            <h3 id="wtTitle"></h3>
+          </div>
+          <p class="stage-desc" id="wtDesc"></p>
+          <div class="stage-body" id="wtBody"></div>
+        </div>
+
+        <div class="btn-row wt-controls">
+          <button id="wtPrev" class="ghost">◀ Back</button>
+          <button id="wtNext">Next step ▶</button>
+          <button id="wtPlay">▶ Play all steps</button>
+          <button id="wtLoop" class="ghost">⟳ Add word &amp; run again</button>
+          <button id="wtReset" class="ghost">Reset</button>
+        </div>
+        <p class="note">Simplified: real models use ~100,000 tokens, vectors with thousands of numbers, dozens of attention heads and up to ~100 layers. Here: 8 numbers per vector, 1 head, 2 layers. The vocabulary scores also lean on statistics from a tiny training text so that the guesses make sense.</p>
+      </div>
+    </section>
+
     <!-- 1. Tokens -->
     <section id="tokens" class="step">
       <div class="step-head">

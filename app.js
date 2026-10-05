@@ -816,4 +816,427 @@
   history = [loss(wPos)];
   renderLoss();
   redrawers.push(renderLoss);
+
+  /* ================= 0. Full end-to-end walkthrough ================= */
+  (function walkthrough() {
+    const D = 8;
+    const HIDDEN = 16;
+    const VOCAB = [...new Set(CORPUS)];
+
+    function rng(seed) {
+      let a = seed >>> 0;
+      return () => {
+        a = (a + 0x6d2b79f5) >>> 0;
+        let t = a;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+    const matrix = (rows, cols, seed, scale) => {
+      const r = rng(seed);
+      return Array.from({ length: rows }, () => Array.from({ length: cols }, () => (r() * 2 - 1) * scale));
+    };
+    const matVec = (M, v) => M.map((row) => row.reduce((s, w, k) => s + w * v[k], 0));
+    const add = (a, b) => a.map((v, i) => v + b[i]);
+    const dot = (a, b) => a.reduce((s, v, i) => s + v * b[i], 0);
+    const layerNorm = (v) => {
+      const mean = v.reduce((a, b) => a + b, 0) / v.length;
+      const sd = Math.sqrt(v.reduce((a, b) => a + (b - mean) ** 2, 0) / v.length) || 1;
+      return v.map((x) => (x - mean) / sd * 0.6);
+    };
+
+    const LAYERS = [1, 2].map((l) => ({
+      Wq: matrix(D, D, 100 + l, 0.6), Wk: matrix(D, D, 200 + l, 0.6), Wv: matrix(D, D, 300 + l, 0.6),
+      W1: matrix(HIDDEN, D, 400 + l, 0.7), W2: matrix(D, HIDDEN, 500 + l, 0.35),
+    }));
+
+    function tokenVec(tok) {
+      const key = clean(tok) || tok.trim();
+      const r = rng(hash(key));
+      const v = Array.from({ length: D }, () => +((r() * 2 - 1) * 0.9).toFixed(2));
+      if (EMB[key]) { v[0] = EMB[key][0]; v[1] = EMB[key][1]; }
+      return v;
+    }
+    const posVec = (p) => Array.from({ length: D }, (_, d) => {
+      const f = p / Math.pow(100, (2 * Math.floor(d / 2)) / D);
+      return +(0.5 * (d % 2 ? Math.cos(f) : Math.sin(f))).toFixed(2);
+    });
+
+    function runLayer(X, L) {
+      const Q = X.map((x) => matVec(L.Wq, x));
+      const K = X.map((x) => matVec(L.Wk, x));
+      const V = X.map((x) => matVec(L.Wv, x));
+      const A = Q.map((q, i) => softmax(K.slice(0, i + 1).map((k) => dot(q, k) / Math.sqrt(D))));
+      const attnOut = A.map((row) => row.reduce((acc, w, j) => acc.map((s, d) => s + w * V[j][d]), new Array(D).fill(0)));
+      const H = X.map((x, i) => layerNorm(add(x, attnOut[i])));
+      const hidden = H.map((h) => matVec(L.W1, h).map((z) => Math.max(0, z)));
+      const out = H.map((h, i) => layerNorm(add(h, matVec(L.W2, hidden[i]))));
+      return { A, H, hidden, out };
+    }
+
+    // ---- state ----
+    let text = $("wtInput").value;
+    let stage = 0;
+    let model = null;
+    let picked = null;
+    let playTimer = null;
+
+    function compute() {
+      const toks = tokenize(text).slice(0, 12);
+      const ids = toks.map((t) => hash(t.toLowerCase()) % 100000);
+      const tv = toks.map(tokenVec);
+      const pv = toks.map((_, i) => posVec(i));
+      const X0 = tv.map((v, i) => add(v, pv[i]));
+      const l1 = runLayer(X0, LAYERS[0]);
+      const l2 = runLayer(l1.out, LAYERS[1]);
+      const final = l2.out[l2.out.length - 1] || new Array(D).fill(0);
+
+      const words = (text.toLowerCase().match(/[a-z]+|\./g) || []);
+      const dist = nextDist(words);
+      const logits = VOCAB.map((w) => {
+        const p = dist.get(w) || 0;
+        const base = p > 0 ? Math.log(p) * 2 + 6 : -7 + (hash(w + words.join(" ")) % 100) / 60;
+        return { name: w, v: +(base + 0.25 * dot(final, tokenVec(w))).toFixed(2) };
+      });
+      return { toks, ids, tv, pv, X0, l1, l2, final, logits };
+    }
+
+    function probs() {
+      const T = Number($("wtTemp").value);
+      const ps = softmax(model.logits.map((l) => l.v), T);
+      return model.logits.map((l, i) => ({ name: l.name, p: ps[i], v: l.v })).sort((a, b) => b.p - a.p);
+    }
+
+    function samplePick() {
+      const items = probs();
+      let r = Math.random();
+      for (const it of items) { r -= it.p; if (r <= 0) return it.name; }
+      return items[0].name;
+    }
+
+    // ---- small render helpers ----
+    const fmt = (v) => (v > -0.05 ? "" : "−") + Math.abs(v).toFixed(1);
+    function cellColor(v) {
+      const c = v >= 0 ? cssVar("--pos") : cssVar("--neg");
+      return `color-mix(in srgb, ${c} ${Math.round(clamp(Math.abs(v), 0, 1) * 80)}%, transparent)`;
+    }
+    function vecRow(label, v, cls = "", delay = 0) {
+      const row = document.createElement("div");
+      row.className = "vrow " + cls;
+      row.style.setProperty("--d", v.length);
+      const lab = document.createElement("span");
+      lab.className = "vlabel";
+      lab.textContent = label;
+      row.appendChild(lab);
+      v.forEach((x, d) => {
+        const c = document.createElement("span");
+        c.className = "vcell";
+        c.style.background = cellColor(x);
+        c.style.animationDelay = delay + d * 20 + "ms";
+        c.textContent = fmt(x);
+        c.title = `dimension ${d}: ${x.toFixed(3)}`;
+        row.appendChild(c);
+      });
+      return row;
+    }
+    function headRow(n = D, label = "") {
+      const row = document.createElement("div");
+      row.className = "vrow head";
+      row.style.setProperty("--d", n);
+      row.innerHTML = `<span class="vlabel">${label}</span>` + Array.from({ length: n }, (_, d) => `<span class="vcell">d${d}</span>`).join("");
+      return row;
+    }
+    const grid = (...rows) => { const g = document.createElement("div"); g.className = "vgrid"; rows.forEach((r) => g.appendChild(r)); return g; };
+    const h4 = (t) => { const e = document.createElement("h4"); e.textContent = t; return e; };
+    const explain = (html) => { const e = document.createElement("p"); e.className = "explain"; e.innerHTML = html; return e; };
+    const show = (t) => t.replace(/^ /, "·");
+    const lastTok = () => show(model.toks[model.toks.length - 1] || "");
+
+    function valueBars(container, items) {
+      container.innerHTML = "";
+      const max = Math.max(...items.map((i) => i.v)), min = Math.min(...items.map((i) => i.v), 0);
+      items.forEach(({ name, v }) => {
+        const row = document.createElement("div");
+        row.className = "bar";
+        row.innerHTML = `<span class="name"></span><span class="track"><span class="fill" style="width:0"></span></span><span class="pct">${v.toFixed(2)}</span>`;
+        row.querySelector(".name").textContent = name;
+        container.appendChild(row);
+        requestAnimationFrame(() => { row.querySelector(".fill").style.width = (((v - min) / (max - min || 1)) * 100).toFixed(1) + "%"; });
+      });
+    }
+
+    // ---- stages ----
+    const STAGES = [
+      {
+        icon: "✂", short: "Tokens", title: "Split the text into tokens",
+        desc: "The model can't read letters. A tokenizer chops the text into known pieces — words, parts of words and punctuation. (· marks a leading space.)",
+        render(body) {
+          const box = document.createElement("div");
+          box.className = "chips";
+          model.toks.forEach((t, i) => {
+            const chip = document.createElement("span");
+            chip.className = "chip";
+            chip.style.setProperty("--h", (hash(t) % 360).toString());
+            chip.style.animationDelay = i * 70 + "ms";
+            chip.innerHTML = `<span class="t"></span><span class="id">#${i}</span>`;
+            chip.querySelector(".t").textContent = show(t);
+            box.appendChild(chip);
+          });
+          body.append(box, explain(`"${text}" → <b>${model.toks.length} tokens</b>. Each one is processed in parallel from here on.`));
+        },
+      },
+      {
+        icon: "#", short: "IDs", title: "Look up each token's ID number",
+        desc: "Each token is found in a fixed vocabulary (a big numbered list). From now on the model works only with these numbers.",
+        render(body) {
+          const list = document.createElement("div");
+          list.className = "idlist";
+          model.toks.forEach((t, i) => {
+            const p = document.createElement("div");
+            p.className = "idpair";
+            p.style.animationDelay = i * 70 + "ms";
+            p.innerHTML = `<span></span><span class="arrow">→</span><span class="num">${model.ids[i]}</span>`;
+            p.firstChild.textContent = show(t);
+            list.appendChild(p);
+          });
+          body.append(list, explain(`The model now sees the list <code>[${model.ids.join(", ")}]</code>.`));
+        },
+      },
+      {
+        icon: "▦", short: "Vectors", title: "Turn each ID into a vector (embedding)",
+        desc: "Each ID picks a row from a learned table of numbers. That row is the token's embedding: a list of numbers describing its meaning. Similar words get similar numbers.",
+        render(body) {
+          body.append(h4(`Embeddings — ${D} numbers per token`), grid(headRow(), ...model.toks.map((t, i) => vecRow(show(t), model.tv[i], "", i * 60))));
+          body.append(explain(`<span class="sw pos"></span>positive <span class="sw neg"></span>negative. Real models use 4,000–16,000 numbers per token instead of ${D}.`));
+        },
+      },
+      {
+        icon: "⌖", short: "Position", title: "Add position information",
+        desc: "Attention on its own doesn't know word order (\"dog bites man\" vs \"man bites dog\"). So a position signal — a wave pattern unique to each slot — is added to each vector.",
+        render(body) {
+          const wrap = document.createElement("div");
+          wrap.className = "two-col";
+          const a = document.createElement("div"), b = document.createElement("div");
+          a.append(h4("Position signal"), grid(headRow(), ...model.pv.map((v, i) => vecRow("pos " + i, v, "", i * 50))));
+          b.append(h4("Embedding + position = input"), grid(headRow(), ...model.X0.map((v, i) => vecRow(show(model.toks[i]), v, "sum", i * 50))));
+          wrap.append(a, b);
+          body.append(wrap);
+        },
+      },
+      {
+        icon: "⇄", short: "Attention", title: "Attention: tokens share information",
+        desc: "Each token makes a Query (\"what am I looking for?\"), a Key (\"what do I contain?\") and a Value (\"what I'll share\"). Query·Key scores → softmax → weights. Each token then takes a weighted mix of the earlier tokens' Values.",
+        render(body) {
+          const A = model.l1.A, n = A.length;
+          const m = document.createElement("div");
+          m.className = "matrix";
+          m.style.gridTemplateColumns = `80px repeat(${n}, minmax(26px, 46px))`;
+          m.appendChild(document.createElement("div")).className = "lab";
+          model.toks.forEach((t) => { const d = document.createElement("div"); d.className = "lab collab"; d.textContent = show(t); m.appendChild(d); });
+          A.forEach((row, i) => {
+            const lab = document.createElement("div");
+            lab.className = "lab rowlab";
+            lab.textContent = show(model.toks[i]);
+            m.appendChild(lab);
+            for (let j = 0; j < n; j++) {
+              const c = document.createElement("div");
+              if (j <= i) {
+                c.style.background = `color-mix(in srgb, ${cssVar("--accent-2")} ${Math.round(row[j] * 100)}%, transparent)`;
+                c.style.outline = `1px solid ${cssVar("--border")}`;
+                c.textContent = Math.round(row[j] * 100);
+                c.title = `${model.toks[i]} → ${model.toks[j]}: ${(row[j] * 100).toFixed(1)}%`;
+              }
+              m.appendChild(c);
+            }
+          });
+          const last = A[n - 1].map((w, j) => ({ name: show(model.toks[j]), p: w })).sort((a, b) => b.p - a.p).slice(0, 5);
+          const wrap = document.createElement("div");
+          wrap.className = "two-col";
+          const a = document.createElement("div"), b = document.createElement("div");
+          a.append(h4("Attention weights, layer 1 (%)"), m);
+          const bars = document.createElement("div");
+          bars.className = "bars";
+          b.append(h4(`What "${lastTok()}" mixes in`), bars);
+          b.append(explain("Blank upper triangle = tokens can't look at future words. Real models run 32–128 attention heads at once, each finding different patterns."));
+          wrap.append(a, b);
+          body.append(wrap);
+          renderBars(bars, last);
+        },
+      },
+      {
+        icon: "◉", short: "Layers", title: "Feed-forward network, then repeat for every layer",
+        desc: "After attention, each token's vector goes through a small neural network: it expands to many neurons, applies ReLU (negative → 0), and shrinks back. Attention + feed-forward = one layer. Here we stack 2; GPT-class models stack 30–120.",
+        render(body) {
+          const i = model.toks.length - 1;
+          const hid = model.l1.hidden[i];
+          const maxH = Math.max(...hid, 0.01);
+          const neurons = document.createElement("div");
+          neurons.className = "neurons";
+          hid.forEach((h, k) => {
+            const d = document.createElement("div");
+            d.style.background = `color-mix(in srgb, ${cssVar("--accent")} ${Math.round((h / maxH) * 100)}%, transparent)`;
+            d.style.animationDelay = k * 30 + "ms";
+            d.title = `neuron ${k}: ${h.toFixed(2)}`;
+            neurons.appendChild(d);
+          });
+          const on = hid.filter((h) => h > 0).length;
+          body.append(
+            h4(`Inside layer 1 — the ${HIDDEN} hidden neurons for "${lastTok()}" (${on} fired, ${HIDDEN - on} silent)`), neurons,
+            h4(`How "${lastTok()}"'s vector changes as it goes through the layers`),
+            grid(
+              headRow(),
+              vecRow("input", model.X0[i], "", 0),
+              vecRow("layer 1", model.l1.out[i], "", 150),
+              vecRow("layer 2", model.l2.out[i], "sum", 300),
+            ),
+            explain(`By the last layer, the vector for the final token "${lastTok()}" holds what the model has worked out about the <b>whole</b> sentence, ready to predict what comes next.`),
+          );
+        },
+      },
+      {
+        icon: "≡", short: "Scores", title: "Score every word in the vocabulary (logits)",
+        desc: "The final vector of the last token is compared with every word in the vocabulary, giving each one a raw score called a logit. Higher = more likely to come next.",
+        render(body) {
+          const sorted = [...model.logits].sort((a, b) => b.v - a.v);
+          const bars = document.createElement("div");
+          bars.className = "bars";
+          const strip = document.createElement("div");
+          strip.className = "vocab-strip";
+          const max = sorted[0].v, min = sorted[sorted.length - 1].v;
+          model.logits.forEach((l) => {
+            const d = document.createElement("div");
+            d.style.background = `color-mix(in srgb, ${cssVar("--accent")} ${Math.round(((l.v - min) / (max - min || 1)) * 100)}%, ${cssVar("--bg-2")})`;
+            d.title = `${l.name}: ${l.v}`;
+            strip.appendChild(d);
+          });
+          body.append(grid(vecRow(`final "${lastTok()}"`, model.final, "sum")), h4("Top 10 raw scores"), bars,
+            h4(`All ${VOCAB.length} words in this tiny vocabulary (hover one)`), strip,
+            explain(`Real models score ~100,000 tokens this way, every single time they write a token.`));
+          valueBars(bars, sorted.slice(0, 10));
+        },
+      },
+      {
+        icon: "%", short: "Probability", title: "Softmax: turn scores into probabilities",
+        desc: "Softmax turns the scores into percentages that add up to 100%. Temperature controls how sharp that is: low = the top word dominates, high = more evenly spread.",
+        render(body) {
+          const items = probs();
+          const bars = document.createElement("div");
+          bars.className = "bars";
+          const top = items.slice(0, 8);
+          const rest = items.slice(8).reduce((s, i) => s + i.p, 0);
+          body.append(h4(`P(next word | "${text}")`), bars,
+            explain(`Formula: <code>p = e^(score / T) / Σ e^(score / T)</code>. Top 8 shown; the other ${items.length - 8} words share ${(rest * 100).toFixed(1)}%. Try the temperature slider above.`));
+          renderBars(bars, top);
+        },
+      },
+      {
+        icon: "🎲", short: "Pick", title: "Pick one token and add it to the text",
+        desc: "One word is randomly drawn using those probabilities (like a weighted dice roll). It's added to the text, and the WHOLE process runs again from step 1 for the next token.",
+        render(body) {
+          if (!picked) picked = samplePick();
+          const items = probs();
+          const wordBox = document.createElement("div");
+          const pw = document.createElement("span");
+          pw.className = "picked-word rolling";
+          wordBox.append(pw);
+          const res = document.createElement("div");
+          res.className = "result-text";
+          const bars = document.createElement("div");
+          bars.className = "bars";
+          body.append(h4("Rolling the weighted dice…"), wordBox, res, h4("Chosen from"), bars);
+          renderBars(bars, items.slice(0, 8), picked);
+          const finish = () => {
+            pw.className = "picked-word";
+            pw.textContent = picked;
+            const p = items.find((x) => x.name === picked);
+            res.innerHTML = "";
+            res.append(text + (picked === "." ? "" : " "));
+            const s = document.createElement("span");
+            s.className = "new";
+            s.textContent = picked;
+            res.append(s);
+            body.append(explain(`Picked "<b>${picked}</b>" (it had a ${(p.p * 100).toFixed(1)}% chance). Press <b>⟳ Add word &amp; run again</b> to feed it back in, which is how a chatbot writes a whole answer.`));
+          };
+          if (reduceMotion) return finish();
+          let n = 0;
+          const roll = setInterval(() => {
+            pw.textContent = items[Math.floor(Math.random() * Math.min(8, items.length))].name;
+            if (++n > 12) { clearInterval(roll); finish(); }
+          }, 70);
+        },
+      },
+    ];
+
+    const stepper = $("wtStepper");
+    STAGES.forEach((s, i) => {
+      const li = document.createElement("li");
+      const b = document.createElement("button");
+      b.innerHTML = `<b>${s.icon}</b>${i + 1}. ${s.short}`;
+      b.addEventListener("click", () => { stopPlay(); go(i); });
+      li.appendChild(b);
+      stepper.appendChild(li);
+    });
+
+    function go(i) {
+      stage = clamp(i, 0, STAGES.length - 1);
+      const s = STAGES[stage];
+      $("wtBadge").textContent = `Step ${stage + 1} / ${STAGES.length}`;
+      $("wtTitle").textContent = s.title;
+      $("wtDesc").textContent = s.desc;
+      const body = $("wtBody");
+      const fresh = body.cloneNode(false);
+      body.replaceWith(fresh);
+      s.render(fresh);
+      [...stepper.querySelectorAll("button")].forEach((b, k) => {
+        b.classList.toggle("on", k === stage);
+        b.classList.toggle("done", k < stage);
+      });
+      $("wtPrev").disabled = stage === 0;
+      $("wtNext").disabled = stage === STAGES.length - 1;
+    }
+
+    function recompute(keepStage) {
+      text = $("wtInput").value.trim() || "the cat";
+      model = compute();
+      picked = null;
+      go(keepStage ? stage : 0);
+    }
+
+    function stopPlay() {
+      clearInterval(playTimer);
+      playTimer = null;
+      $("wtPlay").textContent = "▶ Play all steps";
+    }
+    function play() {
+      if (playTimer) return stopPlay();
+      $("wtPlay").textContent = "■ Stop";
+      if (stage === STAGES.length - 1) go(0);
+      playTimer = setInterval(() => {
+        if (stage >= STAGES.length - 1) return stopPlay();
+        go(stage + 1);
+      }, 2600);
+    }
+
+    $("wtNext").addEventListener("click", () => { stopPlay(); go(stage + 1); });
+    $("wtPrev").addEventListener("click", () => { stopPlay(); go(stage - 1); });
+    $("wtPlay").addEventListener("click", play);
+    $("wtLoop").addEventListener("click", () => {
+      stopPlay();
+      if (!picked) picked = samplePick();
+      $("wtInput").value = text + (picked === "." ? "." : " " + picked);
+      recompute(false);
+      play();
+    });
+    $("wtReset").addEventListener("click", () => { stopPlay(); $("wtInput").value = "the cat sat on the"; recompute(false); });
+    let inputTimer;
+    $("wtInput").addEventListener("input", () => { clearTimeout(inputTimer); inputTimer = setTimeout(() => recompute(true), 250); });
+    $("wtTemp").addEventListener("input", () => {
+      $("wtTempVal").textContent = Number($("wtTemp").value).toFixed(1);
+      picked = null;
+      if (stage >= 7) go(stage);
+    });
+    redrawers.push(() => go(stage));
+    recompute(false);
+  })();
 })();
