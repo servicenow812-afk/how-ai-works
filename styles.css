@@ -506,3 +506,55 @@ footer { text-align: center; color: var(--muted); font-size: 0.85rem; padding: 3
   .vcell { font-size: 0.6rem; }
   .neurons { grid-template-columns: repeat(8, 1fr); }
 }
+
+/* ---------- Characters → IDs → embedding rows ---------- */
+.charflow { display: flex; flex-wrap: wrap; gap: 10px; }
+.charcard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  animation: pop 0.35s ease backwards;
+}
+.charrow { display: flex; gap: 3px; }
+.char {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 30px;
+  padding: 4px 3px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--card);
+}
+.char b { font-family: "JetBrains Mono", monospace; font-size: 1rem; }
+.char small { font-family: "JetBrains Mono", monospace; font-size: 0.66rem; color: var(--accent-2); }
+.charcard .down { font-size: 0.7rem; color: var(--muted); }
+.charcard .idpair { animation: none; padding: 4px 10px; }
+
+.vocab-table { width: 100%; border-collapse: collapse; font-family: "JetBrains Mono", monospace; font-size: 0.85rem; }
+.vocab-table th { text-align: left; font-family: Inter, sans-serif; font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; padding: 4px 10px; border-bottom: 1px solid var(--border); }
+.vocab-table td { padding: 4px 10px; border-bottom: 1px solid var(--border); }
+.vocab-table tr.faded td { color: var(--muted); opacity: 0.6; }
+.vocab-table tr.gap td { color: var(--muted); border-bottom: none; padding: 0 10px; line-height: 1.1; }
+.vocab-table tr.hit td { background: color-mix(in srgb, var(--accent) 22%, transparent); font-weight: 700; }
+.vocab-table tr.hit td:first-child { color: var(--accent-2); border-radius: 6px 0 0 6px; }
+.vocab-table tr.hit td:last-child { border-radius: 0 6px 6px 0; }
+
+.vgrid.wide-label .vrow { grid-template-columns: 150px repeat(var(--d, 8), minmax(34px, 1fr)); }
+.vrow.faded { opacity: 0.35; }
+.vrow.gap .vcell, .vrow.gap .vlabel { height: 14px; border: none; background: none; color: var(--muted); line-height: 1; font-size: 0.7rem; animation: none; }
+.vrow.hit .vlabel { color: var(--accent-2); }
+.vrow.hit .vcell { box-shadow: 0 0 0 1.5px var(--accent); }
+.flow-arrow.big { font-size: 0.95rem; font-weight: 600; color: var(--accent); margin: 14px 0 4px; }
+
+@media (max-width: 860px) {
+  .vgrid.wide-label .vrow { grid-template-columns: 78px repeat(var(--d, 8), minmax(22px, 1fr)); gap: 2px; }
+  .vgrid.wide-label .vlabel { font-size: 0.64rem; }
+  .vgrid.wide-label .vcell { font-size: 0.52rem; }
+  .char { min-width: 24px; }
+}

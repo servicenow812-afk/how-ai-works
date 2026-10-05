@@ -853,7 +853,7 @@
 
     function tokenVec(tok) {
       const key = clean(tok) || tok.trim();
-      const r = rng(hash(key));
+      const r = rng(hash(tok.toLowerCase()));
       const v = Array.from({ length: D }, () => +((r() * 2 - 1) * 0.9).toFixed(2));
       if (EMB[key]) { v[0] = EMB[key][0]; v[1] = EMB[key][1]; }
       return v;
@@ -948,6 +948,14 @@
       return row;
     }
     const grid = (...rows) => { const g = document.createElement("div"); g.className = "vgrid"; rows.forEach((r) => g.appendChild(r)); return g; };
+    const el = (tag, cls, txt) => { const e = document.createElement(tag); e.className = cls; e.textContent = txt; return e; };
+    function gapRow() {
+      const row = document.createElement("div");
+      row.className = "vrow gap";
+      row.style.setProperty("--d", D);
+      row.innerHTML = `<span class="vlabel">⋮</span>` + `<span class="vcell">⋮</span>`.repeat(D);
+      return row;
+    }
     const h4 = (t) => { const e = document.createElement("h4"); e.textContent = t; return e; };
     const explain = (html) => { const e = document.createElement("p"); e.className = "explain"; e.innerHTML = html; return e; };
     const show = (t) => t.replace(/^ /, "·");
@@ -987,28 +995,88 @@
         },
       },
       {
-        icon: "#", short: "IDs", title: "Look up each token's ID number",
-        desc: "Each token is found in a fixed vocabulary (a big numbered list). From now on the model works only with these numbers.",
+        icon: "#", short: "IDs", title: "From characters to numbers: the token ID",
+        desc: "Inside a computer every character is already a number (its Unicode code, e.g. \"a\" = 97). But the model doesn't use letters one by one: the tokenizer matches whole pieces against a fixed dictionary called the vocabulary, and each piece's row number in that dictionary is its token ID.",
         render(body) {
-          const list = document.createElement("div");
-          list.className = "idlist";
+          const chars = document.createElement("div");
+          chars.className = "charflow";
           model.toks.forEach((t, i) => {
-            const p = document.createElement("div");
-            p.className = "idpair";
-            p.style.animationDelay = i * 70 + "ms";
-            p.innerHTML = `<span></span><span class="arrow">→</span><span class="num">${model.ids[i]}</span>`;
-            p.firstChild.textContent = show(t);
-            list.appendChild(p);
+            const card = document.createElement("div");
+            card.className = "charcard";
+            card.style.animationDelay = i * 90 + "ms";
+            const row = document.createElement("div");
+            row.className = "charrow";
+            [...t].forEach((ch) => {
+              const c = document.createElement("span");
+              c.className = "char";
+              c.innerHTML = `<b></b><small>${ch.codePointAt(0)}</small>`;
+              c.firstChild.textContent = ch === " " ? "␣" : ch;
+              row.appendChild(c);
+            });
+            const arrow = document.createElement("div");
+            arrow.className = "down";
+            arrow.textContent = "↓ look up in vocabulary";
+            const id = document.createElement("div");
+            id.className = "idpair";
+            id.innerHTML = `<span></span><span class="arrow">=</span><span class="num">ID ${model.ids[i]}</span>`;
+            id.firstChild.textContent = show(t);
+            card.append(row, arrow, id);
+            chars.appendChild(card);
           });
-          body.append(list, explain(`The model now sees the list <code>[${model.ids.join(", ")}]</code>.`));
+
+          const ids = [...new Map(model.toks.map((t, i) => [model.ids[i], t])).entries()].sort((a, b) => a[0] - b[0]);
+          const table = document.createElement("table");
+          table.className = "vocab-table";
+          table.innerHTML = "<thead><tr><th>ID (row number)</th><th>token piece</th></tr></thead>";
+          const tb = document.createElement("tbody");
+          const addRow = (id, tok, cls = "") => {
+            const tr = document.createElement("tr");
+            tr.className = cls;
+            tr.innerHTML = `<td>${id}</td><td></td>`;
+            tr.lastChild.textContent = tok;
+            tb.appendChild(tr);
+          };
+          addRow(0, "!", "faded"); addRow(1, "\"", "faded"); addRow(2, "#", "faded");
+          ids.forEach(([id, t]) => { addRow("⋮", "⋮", "gap"); addRow(id, show(t), "hit"); });
+          addRow("⋮", "⋮", "gap"); addRow(99999, "·zebra", "faded");
+          table.appendChild(tb);
+
+          const wrap = document.createElement("div");
+          wrap.className = "two-col";
+          const a = document.createElement("div"), b = document.createElement("div");
+          a.append(h4("Characters (with their Unicode numbers) → token ID"), chars);
+          b.append(h4("The vocabulary: a fixed list of 100,000 pieces"), table);
+          wrap.append(a, b);
+          body.append(wrap, explain(`So the text <code>"${text}"</code> becomes just the list <code>[${model.ids.join(", ")}]</code>. The character codes are only used to find the piece; from here on the model only sees the IDs. The vocabulary is built once, before training, from the most common character sequences in a lot of text.`));
         },
       },
       {
-        icon: "▦", short: "Vectors", title: "Turn each ID into a vector (embedding)",
-        desc: "Each ID picks a row from a learned table of numbers. That row is the token's embedding: a list of numbers describing its meaning. Similar words get similar numbers.",
+        icon: "▦", short: "Vectors", title: "The ID picks a row from the embedding table: that row is the vector",
+        desc: "The model has a big table of numbers called the embedding table: one row per vocabulary ID, one column per dimension. The token ID just says which row to read. That row of numbers is the token's vector. The numbers start random and are adjusted during training until similar words have similar rows.",
         render(body) {
-          body.append(h4(`Embeddings — ${D} numbers per token`), grid(headRow(), ...model.toks.map((t, i) => vecRow(show(t), model.tv[i], "", i * 60))));
-          body.append(explain(`<span class="sw pos"></span>positive <span class="sw neg"></span>negative. Real models use 4,000–16,000 numbers per token instead of ${D}.`));
+          const ids = [...new Map(model.toks.map((t, i) => [model.ids[i], i])).entries()].sort((a, b) => a[0] - b[0]);
+          const filler = (seed) => { const r = rng(seed); return Array.from({ length: D }, () => +((r() * 2 - 1) * 0.9).toFixed(2)); };
+          const tableRows = [headRow(D, "row (ID)")];
+          tableRows.push(vecRow("0  !", filler(1), "faded"));
+          tableRows.push(vecRow("1  \"", filler(2), "faded"));
+          ids.forEach(([id, i], k) => {
+            tableRows.push(gapRow());
+            tableRows.push(vecRow(`${id} ${show(model.toks[i])}`, model.tv[i], "hit", k * 160));
+          });
+          tableRows.push(gapRow());
+          tableRows.push(vecRow("99999 ·zebra", filler(3), "faded"));
+          const tbl = grid(...tableRows);
+          tbl.classList.add("wide-label");
+
+          const out = grid(headRow(D, "token"), ...model.toks.map((t, i) => vecRow(`${show(t)} (${model.ids[i]})`, model.tv[i], "", 400 + i * 80)));
+          out.classList.add("wide-label");
+
+          body.append(
+            h4(`Embedding table: 100,000 rows × ${D} columns (highlighted = rows used by your prompt)`), tbl,
+            el("div", "flow-arrow big", "↓ copy each token's row, in sentence order ↓"),
+            h4("Result: one vector per token, the input to the rest of the model"), out,
+            explain(`<span class="sw pos"></span>positive <span class="sw neg"></span>negative. In this demo, d0 and d1 hold the word's position on the 2D meaning map further down the page. Real tables are much bigger: GPT-3's is 50,257 rows × 12,288 columns, about 600 million learned numbers just for this one lookup.`),
+          );
         },
       },
       {
