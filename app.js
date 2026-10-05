@@ -817,6 +817,8 @@
   renderLoss();
   redrawers.push(renderLoss);
 
+  window.HAI = { CORPUS, softmax, hash, cssVar, svgEl, renderBars, clamp, reduceMotion, redrawers, tokenize, EMB };
+
   /* ================= 0. Full end-to-end walkthrough ================= */
   (function walkthrough() {
     const D = 8;
@@ -858,6 +860,8 @@
       if (EMB[key]) { v[0] = EMB[key][0]; v[1] = EMB[key][1]; }
       return v;
     }
+    window.HAI.tokenVec = tokenVec;
+    window.HAI.D = D;
     const posVec = (p) => Array.from({ length: D }, (_, d) => {
       const f = p / Math.pow(100, (2 * Math.floor(d / 2)) / D);
       return +(0.5 * (d % 2 ? Math.cos(f) : Math.sin(f))).toFixed(2);

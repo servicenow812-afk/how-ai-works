@@ -15,6 +15,12 @@ Then one deep-dive section per stage:
 5. **Predict**: a tiny trigram language model that writes one word at a time, with a temperature slider.
 6. **Learn**: gradient descent on a loss curve, with a learning-rate slider and a loss history chart.
 
+**Behind the scenes:**
+
+7. **Dataset:** a real training mix (GPT-3), then the full data pipeline on a tiny real dataset: collect → clean → tokenize → store as binary (hex dump) → cut into training examples → shuffle into batches.
+8. **Live training:** a real tiny language model (embedding table + output table, 1,037 parameters) trains in the browser. One step is shown in full: the example, the embedding row lookup, the prediction, the loss, the gradient and the update. You can watch the loss fall and the embedding map organize itself.
+9. **Storage:** the real tensor layout of GPT-2's model file (where the embedding table sits), the exact bytes and float32 bits of one token's row, and how the weights get from disk to RAM to the GPU.
+
 ## Run locally
 
 ```bash
