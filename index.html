@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How AI Works</title>
+  <meta name="description" content="An interactive, visual walkthrough of how a language model turns your words into an answer.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <canvas id="bg" aria-hidden="true"></canvas>
+
+  <header class="hero">
+    <nav class="topnav">
+      <span class="brand"><span class="dot"></span> How AI Works</span>
+      <button id="themeToggle" class="ghost" aria-label="Toggle light and dark theme">◐</button>
+    </nav>
+    <div class="hero-inner">
+      <p class="eyebrow">An interactive visual guide</p>
+      <h1>What happens inside an AI<br>when you type a question?</h1>
+      <p class="lede">Large language models like ChatGPT and Claude don't look things up — they predict the next word, one at a time, using billions of learned numbers. Scroll through each step and play with it.</p>
+
+      <ol class="pipeline" id="pipeline">
+        <li><a href="#tokens"><span>1</span>Tokenize</a></li>
+        <li><a href="#embeddings"><span>2</span>Embed</a></li>
+        <li><a href="#attention"><span>3</span>Attend</a></li>
+        <li><a href="#network"><span>4</span>Compute</a></li>
+        <li><a href="#predict"><span>5</span>Predict</a></li>
+        <li><a href="#training"><span>6</span>Learn</a></li>
+      </ol>
+    </div>
+  </header>
+
+  <main>
+    <!-- 1. Tokens -->
+    <section id="tokens" class="step">
+      <div class="step-head">
+        <span class="step-num">01</span>
+        <div>
+          <h2>Text is chopped into tokens</h2>
+          <p>Computers only understand numbers. So first, your text is split into small pieces called <strong>tokens</strong> — whole words, parts of words, or punctuation — and each one gets an ID number from a fixed vocabulary.</p>
+        </div>
+      </div>
+      <div class="card">
+        <label class="field">
+          <span>Type anything</span>
+          <input id="tokInput" type="text" value="Unbelievably, the playful cat jumped over the sleeping dog!" autocomplete="off">
+        </label>
+        <div id="tokChips" class="chips" aria-live="polite"></div>
+        <div class="stats">
+          <div><b id="tokCount">0</b><span>tokens</span></div>
+          <div><b id="charCount">0</b><span>characters</span></div>
+          <div><b id="ratio">0</b><span>chars / token</span></div>
+        </div>
+        <p class="note">Long or rare words get broken into pieces (“Un·believ·ably”). Real models use a vocabulary of ~50,000–200,000 pieces learned from data.</p>
+      </div>
+    </section>
+
+    <!-- 2. Embeddings -->
+    <section id="embeddings" class="step">
+      <div class="step-head">
+        <span class="step-num">02</span>
+        <div>
+          <h2>Each token becomes a point in “meaning space”</h2>
+          <p>Every token ID is turned into a long list of numbers called an <strong>embedding</strong>. Words with similar meanings end up close together. Real embeddings have thousands of dimensions — here we squash them into 2D so you can see them.</p>
+        </div>
+      </div>
+      <div class="card split">
+        <div class="plot-wrap">
+          <svg id="embedPlot" viewBox="0 0 600 440" role="img" aria-label="2D map of word embeddings"></svg>
+        </div>
+        <div class="side">
+          <label class="field">
+            <span>Highlight words</span>
+            <input id="embedInput" type="text" value="cat king pizza happy" autocomplete="off">
+          </label>
+          <div class="btn-row">
+            <button id="analogyBtn">Show: king − man + woman</button>
+          </div>
+          <div id="embedInfo" class="info">Hover a dot to see its (pretend) coordinates.</div>
+          <div class="legend" id="embedLegend"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Attention -->
+    <section id="attention" class="step">
+      <div class="step-head">
+        <span class="step-num">03</span>
+        <div>
+          <h2>Attention: words look at each other</h2>
+          <p>A word's meaning depends on context. In <strong>self-attention</strong>, every token asks “which other tokens matter to me?” and blends in information from them. Models run many <em>attention heads</em> in parallel, each looking for different patterns.</p>
+        </div>
+      </div>
+      <div class="card">
+        <div class="controls">
+          <label class="field grow">
+            <span>Sentence</span>
+            <input id="attInput" type="text" value="The cat sat on the mat because it was tired" autocomplete="off">
+          </label>
+          <div class="seg" id="headSeg" role="radiogroup" aria-label="Attention head">
+            <button data-head="0" class="on" role="radio" aria-checked="true">Head 1 · neighbors</button>
+            <button data-head="1" role="radio" aria-checked="false">Head 2 · meaning</button>
+            <button data-head="2" role="radio" aria-checked="false">Head 3 · who is “it”?</button>
+          </div>
+        </div>
+        <svg id="attSvg" viewBox="0 0 900 260" role="img" aria-label="Attention arcs between words"></svg>
+        <div class="split att-bottom">
+          <div>
+            <p class="hint">Hover or tap a word to see where it looks.</p>
+            <div id="attBars" class="bars"></div>
+          </div>
+          <div>
+            <p class="hint">Full attention matrix (row = word looking, column = word looked at)</p>
+            <div id="attMatrix" class="matrix"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. Network -->
+    <section id="network" class="step">
+      <div class="step-head">
+        <span class="step-num">04</span>
+        <div>
+          <h2>Layers of neurons crunch the numbers</h2>
+          <p>After attention, each token passes through a <strong>neural network</strong>: layers of simple units that multiply inputs by learned <em>weights</em>, add them up, and pass the result on. Stack ~100 of these attention + network blocks and you have a modern LLM. This mini-network is running for real — move the sliders.</p>
+        </div>
+      </div>
+      <div class="card split">
+        <div class="plot-wrap">
+          <canvas id="netCanvas" width="640" height="400" aria-label="Animated neural network"></canvas>
+        </div>
+        <div class="side">
+          <div id="netSliders"></div>
+          <div class="btn-row">
+            <button id="pulseBtn">▶ Run forward pass</button>
+            <button id="reweightBtn" class="ghost">Shuffle weights</button>
+          </div>
+          <div id="netOut" class="bars"></div>
+          <p class="note"><span class="sw pos"></span>positive weight <span class="sw neg"></span>negative weight. Brighter neurons are more “active”.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. Prediction -->
+    <section id="predict" class="step">
+      <div class="step-head">
+        <span class="step-num">05</span>
+        <div>
+          <h2>It predicts the next word — then repeats</h2>
+          <p>The final layer scores every token in the vocabulary. Those scores become <strong>probabilities</strong>, one word is picked, appended to the text, and the whole process runs again. That's it — answers are written one token at a time. Below is a tiny real model trained on a few sentences.</p>
+        </div>
+      </div>
+      <div class="card split">
+        <div>
+          <div class="gen-box" id="genText" aria-live="polite"></div>
+          <div class="btn-row">
+            <button id="stepBtn">Pick next word</button>
+            <button id="autoBtn">▶ Auto-write</button>
+            <button id="resetGenBtn" class="ghost">Reset</button>
+          </div>
+          <label class="field">
+            <span>Temperature: <b id="tempVal">1.0</b> <em class="muted" id="tempDesc">balanced</em></span>
+            <input id="temp" type="range" min="0.1" max="2" step="0.1" value="1">
+          </label>
+          <p class="note">Low temperature → always picks the safest word (predictable). High temperature → takes more risks (creative, sometimes nonsense).</p>
+        </div>
+        <div>
+          <p class="hint">Next-word probabilities</p>
+          <div id="probBars" class="bars"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. Training -->
+    <section id="training" class="step">
+      <div class="step-head">
+        <span class="step-num">06</span>
+        <div>
+          <h2>Where do the weights come from? Training.</h2>
+          <p>A model starts with random weights and terrible guesses. During <strong>training</strong> it reads huge amounts of text, guesses each next word, measures how wrong it was (the <em>loss</em>), and nudges every weight slightly downhill to be less wrong. This is <strong>gradient descent</strong> — repeated trillions of times.</p>
+        </div>
+      </div>
+      <div class="card split">
+        <div class="plot-wrap">
+          <svg id="lossSvg" viewBox="0 0 600 340" role="img" aria-label="Loss landscape with a ball rolling downhill"></svg>
+        </div>
+        <div class="side">
+          <label class="field">
+            <span>Learning rate: <b id="lrVal">0.10</b></span>
+            <input id="lr" type="range" min="0.01" max="0.6" step="0.01" value="0.1">
+          </label>
+          <div class="btn-row">
+            <button id="trainBtn">▶ Train</button>
+            <button id="trainStepBtn" class="ghost">One step</button>
+            <button id="trainResetBtn" class="ghost">Random start</button>
+          </div>
+          <div class="stats">
+            <div><b id="epoch">0</b><span>steps</span></div>
+            <div><b id="lossVal">–</b><span>loss</span></div>
+          </div>
+          <svg id="lossHist" viewBox="0 0 300 110" role="img" aria-label="Loss over time"></svg>
+          <p class="note">Too small a learning rate is slow; too big and it overshoots and bounces around. It can also get stuck in a local dip.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="step recap">
+      <h2>The whole loop in one sentence</h2>
+      <p class="big">Text → <b>tokens</b> → <b>vectors</b> → mixed by <b>attention</b> → transformed by <b>layers</b> → <b>probabilities</b> → pick a word → repeat.</p>
+      <p>Everything the model “knows” lives in its weights, shaped by training to make good next-word guesses. Surprisingly, getting really good at that one task produces something that can explain, translate, code and reason.</p>
+    </section>
+  </main>
+
+  <footer>
+    <p>Built with plain HTML, CSS &amp; JavaScript. All visuals are simplified illustrations.</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
